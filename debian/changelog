@@ -1,3 +1,9 @@
+initramfs-tools (0.142-0deepin14) unstable; urgency=medium
+
+  * Add uos-trace logging to initramfs for performance timing analysis 
+
+ -- xinpeng.wang <wangxinpeng@uniontech.com>  Tue, 02 Jun 2026 17:09:44 +0800
+
 initramfs-tools (0.142-0deepin13) unstable; urgency=medium
 
   * Implement disk cleanup mechanism in initramfs to handle full disk scenarios.

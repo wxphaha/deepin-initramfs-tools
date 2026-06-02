@@ -1,0 +1,48 @@
+Index: deepin-initramfs-tools/hook-functions
+===================================================================
+--- deepin-initramfs-tools.orig/hook-functions
++++ deepin-initramfs-tools/hook-functions
+@@ -886,6 +886,8 @@ cache_run_scripts()
+ 	runlist=$(get_prereq_pairs | tsort)
+ 	for crs_x in ${runlist}; do
+ 		[ -f "${initdir}/${crs_x}" ] || continue
++		# shellcheck disable=SC2129
++		echo "echo \"uos-trace ${scriptdir}/${crs_x}\" > /dev/kmsg || true"  >> "${initdir}/ORDER"
+ 		echo "${scriptdir}/${crs_x} \"\$@\"" >> "${initdir}/ORDER"
+ 		echo "[ -e /conf/param.conf ] && . /conf/param.conf" >> "${initdir}/ORDER"
+ 	done
+Index: deepin-initramfs-tools/scripts/functions
+===================================================================
+--- deepin-initramfs-tools.orig/scripts/functions
++++ deepin-initramfs-tools/scripts/functions
+@@ -33,6 +33,11 @@ log_end_msg()
+ 	_log_msg "done.\\n"
+ }
+ 
++trace_log()
++{
++	echo "uos-trace: $*" > /dev/kmsg || true
++}
++
+ panic()
+ {
+ 	local console rest IFS
+Index: deepin-initramfs-tools/scripts/local
+===================================================================
+--- deepin-initramfs-tools.orig/scripts/local
++++ deepin-initramfs-tools/scripts/local
+@@ -176,12 +176,14 @@ local_mount_root()
+ 
+ 	# Mount root
+ 	# shellcheck disable=SC2086
++	trace_log "exec mount ${roflag} ${FSTYPE:+-t ${FSTYPE}} ${ROOTFLAGS} ${ROOT} ${rootmnt?}"
+ 	if ! mount ${roflag} ${FSTYPE:+-t "${FSTYPE}"} ${ROOTFLAGS} "${ROOT}" "${rootmnt?}"; then
+ 		panic "Failed to mount ${ROOT} as root file system."
+ 		# Mount root
+ 		# shellcheck disable=SC2086
+ 		mount ${roflag} ${FSTYPE:+-t "${FSTYPE}"} ${ROOTFLAGS} "${ROOT}" "${rootmnt?}"
+ 	fi
++	trace_log "mount end"
+ }
+ 
+ local_mount_fs()
