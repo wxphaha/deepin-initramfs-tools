@@ -9,3 +9,4 @@ uniontech-resolve-device-by-decreasing-priority.patch
 uniontech-Improve-boot-performance-using-lz4.patch
 uniontech-add-check-fs.patch
 uniontech-add-log-for-performance.patch
+uniontech-not-wait-udev.patch

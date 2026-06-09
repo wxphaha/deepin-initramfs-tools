@@ -1,3 +1,10 @@
+initramfs-tools (0.142-0deepin15) unstable; urgency=medium
+
+  * Optimize boot speed on UOS by stripping global wait_for_udev settle, 
+  * while guarding GPU setup securely in init-bottom.
+
+ -- xinpeng.wang <wangxinpeng@uniontech.com>  Tue, 09 Jun 2026 21:23:51 +0800
+
 initramfs-tools (0.142-0deepin14) unstable; urgency=medium
 
   * Add uos-trace logging to initramfs for performance timing analysis 
