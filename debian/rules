@@ -8,15 +8,7 @@
 BUSYBOX_PACKAGES := $(shell if dpkg-vendor --derives-from ubuntu; then echo busybox-initramfs; else echo busybox busybox-static; fi)
 BUSYBOX_MIN_VERSION := 1:1.22.0-17~
 
-ifneq (,$(filter uos Uos UOS,$(shell lsb_release -i -s)))
-	UOS_SYSTEM = yes
-endif
-
 override_dh_auto_configure:
-ifeq (yes,$(UOS_SYSTEM))
-	echo "UOS detected: applying uniontech-not-wait-udev.patch"
-	patch -p1 < debian/patches/uniontech-not-wait-udev.patch
-endif
 	dh_auto_configure
 
 override_dh_gencontrol:

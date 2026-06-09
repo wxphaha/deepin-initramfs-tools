@@ -1,48 +1,123 @@
 Index: deepin-initramfs-tools/scripts/functions
 ===================================================================
---- deepin-initramfs-tools.orig/scripts/functions	2025-11-18 19:15:26.000000000 +0800
-+++ deepin-initramfs-tools/scripts/functions	2025-11-18 19:18:25.667908421 +0800
-@@ -393,8 +393,10 @@
+--- deepin-initramfs-tools.orig/scripts/functions
++++ deepin-initramfs-tools/scripts/functions
+@@ -210,6 +210,7 @@ get_fstype ()
+ {
+ 	local FS FSTYPE
+ 	FS="${1}"
++	trace_log "get fstype ${FS}"
+ 
+ 	# blkid has a more complete list of file systems,
+ 	# but fstype is more robust
+@@ -396,10 +397,27 @@ configure_networking()
+ }
+ 
  # Wait for queued kernel/udev events
++_WAIT_FOR_UDEV_OS_CACHE=""
  wait_for_udev()
  {
--	command -v udevadm >/dev/null 2>&1 || return 0
--	udevadm settle ${1:+--timeout=$1}
-+	# command -v udevadm >/dev/null 2>&1 || return 0
-+	# udevadm settle ${1:+--timeout=$1}
-+	# Not wait for udev to improve boot performance
++	# Check if the OS type has already been detected and cached.
++	# If empty, this is the first execution; perform the one-time check.
++	if [ -z "$_WAIT_FOR_UDEV_OS_CACHE" ]; then
++		if [ -f /etc/os-release ] && grep -q '^ID=uos$' /etc/os-release; then
++			_WAIT_FOR_UDEV_OS_CACHE="uos"
++		else
++			_WAIT_FOR_UDEV_OS_CACHE="other"
++		fi
++	fi
++
++	# Optimization path for UOS production systems:
++	# Skip the time-consuming udevadm settle to aggressively optimize boot time.
++	if [ "$_WAIT_FOR_UDEV_OS_CACHE" = "uos" ]; then
++		return 0
++	fi
+ 	command -v udevadm >/dev/null 2>&1 || return 0
+ 	udevadm settle ${1:+--timeout=$1}
 +	return 0
  }
  
  # Find a specific fstab entry
+@@ -438,6 +456,7 @@ read_fstab_entry() {
+ # Resolved name is echoed.
+ resolve_device() {
+ 	DEV="$1"
++	trace_log "resolve ${DEV}"
+ 
+ 	case "$DEV" in
+ 	LABEL=* | UUID=* | PARTLABEL=* | PARTUUID=*)
 Index: deepin-initramfs-tools/init
 ===================================================================
---- deepin-initramfs-tools.orig/init	2025-11-18 19:15:26.000000000 +0800
-+++ deepin-initramfs-tools/init	2025-11-19 10:14:48.252875762 +0800
-@@ -339,6 +339,26 @@
+--- deepin-initramfs-tools.orig/init
++++ deepin-initramfs-tools/init
+@@ -223,6 +223,11 @@ maybe_break top
+ # Don't do log messages here to avoid confusing graphical boots
+ run_scripts /scripts/init-top
  
- maybe_break init
++if [ "$BOOT" != "local" ] && [ "$BOOT" != "ostree" ]; then
++    trace_log "Non-local/ostree boot detected ($BOOT), waiting for udev settle"
++    udevadm settle || true
++fi
++
+ maybe_break modules
+ [ "$quiet" != "y" ] && log_begin_msg "Loading essential drivers"
+ [ -n "${netconsole}" ] && /sbin/modprobe netconsole netconsole="${netconsole}"
+@@ -449,6 +454,28 @@ nfs_bottom
+ local_bottom
  
+ maybe_break bottom
++
++trace_log "begin wait gpu device"
 +wait_for_gpu_device() {
-+    local count=0
-+    while [ $count -lt 400 ]; do
-+        if [ -c "/dev/dri/card0" ] || [ -c "/dev/dri/card1" ] || [ -c "/dev/dri/card2" ]; then
-+            return 0
-+        fi
++	local count=0
++	while [ $count -lt 2000 ]; do
++		if [ -c "/dev/dri/card0" ] || [ -c "/dev/dri/card1" ] || [ -c "/dev/dri/card2" ]; then
++			return 0
++		fi
 +
-+        if [ ! -f "/run/udev/queue" ]; then
-+            return 0
-+        fi
++		if [ ! -f "/run/udev/queue" ]; then
++			return 0
++		fi
 +
-+        sleep 0.005
-+		log_warning_msg "No drm device,wait $count times"
-+        count=$((count + 1))
-+    done
-+	log_warning_msg "No drm device,timeout"
-+    return 1
++		sleep 0.005
++		trace_log "No drm device,wait $count times"
++		count=$((count + 1))
++	done
++	trace_log "No drm device,timeout"
++	return 1
 +}
 +wait_for_gpu_device || true
 +
- # don't leak too much of env - some init(8) don't clear it
- # (keep init, rootmnt, drop_caps)
- unset debug
+ [ "$quiet" != "y" ] && log_begin_msg "Running /scripts/init-bottom"
+ # We expect udev's init-bottom script to move /dev to ${rootmnt}/dev
+ run_scripts /scripts/init-bottom
+@@ -514,6 +541,7 @@ mount -n -o move /proc ${rootmnt}/proc
+ 
+ # Chain to real filesystem
+ # shellcheck disable=SC2086,SC2094
++trace_log "end initramfs"
+ exec run-init ${drop_caps} "${rootmnt}" "${init}" "$@" <"${rootmnt}/dev/console" >"${rootmnt}/dev/console" 2>&1
+ echo "Something went badly wrong in the initramfs."
+ panic "Please file a bug on initramfs-tools."
+Index: deepin-initramfs-tools/scripts/local
+===================================================================
+--- deepin-initramfs-tools.orig/scripts/local
++++ deepin-initramfs-tools/scripts/local
+@@ -76,6 +76,7 @@ local_device_setup()
+ 	if ! real_dev=$(resolve_device "${dev_id}") ||
+ 	   ! get_fstype "${real_dev}" >/dev/null; then
+ 		log_begin_msg "Waiting for ${name}"
++		trace_log "Waiting for ${name}"
+ 
+ 		# Timeout is max(30, rootdelay) seconds (approximately)
+ 		slumber=30
+@@ -119,6 +120,9 @@ local_device_setup()
+ 				break
+ 			fi
+ 		done
++	else
++		DEV="${real_dev}"
++		return
+ 	fi
+ 
+ 	# We've given up, but we'll let the user fix matters if they can
