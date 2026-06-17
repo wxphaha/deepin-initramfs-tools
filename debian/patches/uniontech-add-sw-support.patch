@@ -1,0 +1,44 @@
+diff --git a/hooks/adaptSw b/hooks/adaptSw
+new file mode 100755
+index 0000000..fd8cd7c
+--- /dev/null
++++ b/hooks/adaptSw
+@@ -0,0 +1,38 @@
++#!/bin/sh
++## sw support.
++
++PREREQ=""
++
++prereqs()
++{
++        echo "$PREREQ"
++}
++
++case $1 in
++# get pre-requisites
++ereqs)
++        prereqs
++        exit 0
++        ;;
++esac
++
++if [ "$(uname -m)" != "sw_64" ] ;then
++	exit 0
++fi
++
++. /usr/share/initramfs-tools/hook-functions
++if [ -h /lib/ld-linux.so.2 ];then
++	copy_exec /lib/ld-linux.so.2
++fi
++
++if [ -d /lib/firmware/radeon ]
++then
++    mkdir -p ${DESTDIR}/lib/firmware/radeon/
++    cp -rpL --update=none /lib/firmware/radeon/* ${DESTDIR}/lib/firmware/radeon/ ||true
++fi
++
++if [ -d /lib/firmware/amdgpu ]
++then
++    mkdir -p ${DESTDIR}/lib/firmware/amdgpu/
++    cp -rpL --update=none /lib/firmware/amdgpu/* ${DESTDIR}/lib/firmware/amdgpu/ || true
++fi
